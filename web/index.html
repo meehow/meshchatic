@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="stylesheet" href="/leaflet/leaflet.css" />
+	<script src="/leaflet/leaflet.js"></script>
+	<style>
+		body {
+			font-family: sans-serif;
+			margin: 20px auto;
+			max-width: 1000px;
+			line-height: 1.6;
+			font-size: 18px;
+			color: #444;
+			padding: 0 10px
+		}
+		#map {
+			height: 500px;
+			margin-bottom: 20px;
+		}
+	</style>
+	<title>Meshchatic</title>
+</head>
+
+<body>
+	<h1>Meshchatic</h1>
+	<div id="map"></div>
+	<div id="chat"></div>
+	<template id="textMessage">
+		<div class="textMessage">
+			<b>&lt;</b>
+			<span class="from"></span><b>@</b><span class="gate"></span>
+			<b>&gt;</b>
+			<span class="text"></span>
+		</div>
+	</template>
+
+	<script>
+		function onMessage(event) {
+			var message = JSON.parse(event.data);
+			switch (message.topic) {
+				case 'NODEINFO_APP':
+					onNodeinfo(message.payload);
+					break;
+				case 'POSITION_APP':
+					onPosition(message.payload);
+					break;
+				case 'TEXT_MESSAGE_APP':
+					onTextMessage(message.payload);
+					break;
+
+			}
+		}
+		function onNodeinfo(payload) {
+			nodeinfo[payload.packet.from] = payload.packet.decoded;
+		}
+		function onPosition(payload) {
+			var decoded = payload.packet.decoded;
+			if (!decoded.latitudeI && !decoded.longitudeI) {
+				return;
+			}
+			L.marker([
+				decoded.latitudeI / 10000000,
+				decoded.longitudeI / 10000000])
+				.addTo(map)
+				.bindPopup('Node ID: ' + payload.packet.from);
+		}
+		function onTextMessage(payload) {
+			var ni = nodeinfo[payload.packet.from];
+			var clone = document.querySelector('#textMessage').content.cloneNode(true);
+			clone.querySelector('.from').textContent = ni ? ni.longName : payload.packet.from;
+			clone.querySelector('.gate').textContent = payload.gatewayId;
+			clone.querySelector('.text').textContent = payload.packet.decoded;
+			chat.appendChild(clone);
+
+		}
+		var nodeinfo = {};
+		var chat = document.querySelector('#chat');
+		var map = L.map('map').setView([20, 10], 2);
+		L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+			attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+		}).addTo(map);
+		var socket = new WebSocket(location.protocol == 'http:' ?'ws://localhost:1985/ws' : 'wss://'+ location.hostname +'/ws');
+		socket.onmessage = onMessage;
+		socket.onerror = console.log;
+	</script>
+</body>
+
+</html>
