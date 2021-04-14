@@ -16,6 +16,7 @@
 			color: #444;
 			padding: 0 10px
 		}
+
 		#map {
 			height: 500px;
 			margin-bottom: 20px;
@@ -31,7 +32,7 @@
 	<template id="textMessage">
 		<div class="textMessage">
 			<b>&lt;</b>
-			<span class="from"></span><b>@</b><span class="gate"></span>
+			<a class="from"></a><b>@</b><a class="gate"></a>
 			<b>&gt;</b>
 			<span class="text"></span>
 		</div>
@@ -40,49 +41,85 @@
 	<script>
 		function onMessage(event) {
 			var message = JSON.parse(event.data);
-			switch (message.topic) {
+			switch (message.app) {
 				case 'NODEINFO_APP':
-					onNodeinfo(message.payload);
+					onNodeinfo(message);
 					break;
 				case 'POSITION_APP':
-					onPosition(message.payload);
+					onPosition(message);
 					break;
 				case 'TEXT_MESSAGE_APP':
-					onTextMessage(message.payload);
+					onTextMessage(message);
 					break;
-
 			}
 		}
-		function onNodeinfo(payload) {
-			nodeinfo[payload.packet.from] = payload.packet.decoded;
+		function onNodeinfo(message) {
+			nodeinfos[message.nodeID] = message;
 		}
-		function onPosition(payload) {
-			var decoded = payload.packet.decoded;
+		function onPosition(message) {
+			var decoded = message.payload.packet.decoded;
 			if (!decoded.latitudeI && !decoded.longitudeI) {
 				return;
 			}
-			L.marker([
+			marker = markers[message.nodeID];
+			var latLng = [
 				decoded.latitudeI / 10000000,
-				decoded.longitudeI / 10000000])
-				.addTo(map)
-				.bindPopup('Node ID: ' + payload.packet.from);
+				decoded.longitudeI / 10000000]
+			if (!marker) {
+				marker = L.marker(latLng);
+				markers[message.nodeID] = marker;
+				marker.addTo(map);
+			} else {
+				marker.setLatLng(latLng);
+			}
+			var popup = 'Node ID: ' + message.nodeID;
+			var nodeinfo = nodeinfos[message.nodeID];
+			if (nodeinfo) {
+				popup += '<br>Name: ' + nodeinfo.payload.packet.decoded.longName;
+				if (nodeinfo.payload.packet.decoded.shortName != nodeinfo.payload.packet.decoded.longName) {
+					popup += '<br>Short name: ' + nodeinfo.payload.packet.decoded.shortName;
+				}
+				popup += '<br>Hardware: ' + nodeinfo.payload.packet.decoded.hwModel;
+				popup += '<br>Channel: ' + nodeinfo.payload.channelId;
+			}
+			marker.bindPopup(popup);
 		}
-		function onTextMessage(payload) {
-			var ni = nodeinfo[payload.packet.from];
+		function onTextMessage(message) {
+			if (prevPacket == message.payload.packet.id) {
+				return;
+			}
+			var nodeinfo = nodeinfos[message.nodeID];
+			var nodeMarker = markers[message.nodeID];
+			var gateMarker = markers[message.payload.gatewayId];
 			var clone = document.querySelector('#textMessage').content.cloneNode(true);
-			clone.querySelector('.from').textContent = ni ? ni.longName : payload.packet.from;
-			clone.querySelector('.gate').textContent = payload.gatewayId;
-			clone.querySelector('.text').textContent = payload.packet.decoded;
+			if (nodeMarker) {
+				clone.querySelector('.from').href = "#";
+				clone.querySelector('.from').onclick = function() {
+					nodeMarker.openPopup();
+				}
+			}
+			clone.querySelector('.from').textContent = nodeinfo ? nodeinfo.payload.packet.decoded.longName : message.payload.packet.from;
+			if (gateMarker) {
+				clone.querySelector('.gate').href = "#";
+				clone.querySelector('.gate').onclick = function() {
+					gateMarker.openPopup();
+				}
+			}
+			clone.querySelector('.gate').textContent = message.payload.gatewayId;
+			clone.querySelector('.text').textContent = message.payload.packet.decoded;
 			chat.appendChild(clone);
+			prevPacket = message.payload.packet.id;
 
 		}
-		var nodeinfo = {};
+		var prevPacket;
+		var nodeinfos = {};
+		var markers = {};
 		var chat = document.querySelector('#chat');
 		var map = L.map('map').setView([20, 10], 2);
 		L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 			attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 		}).addTo(map);
-		var socket = new WebSocket(location.protocol == 'http:' ?'ws://localhost:1985/ws' : 'wss://'+ location.hostname +'/ws');
+		var socket = new WebSocket(location.protocol == 'http:' ? 'ws://localhost:1985/ws' : 'wss://' + location.hostname + '/ws');
 		socket.onmessage = onMessage;
 		socket.onerror = console.log;
 	</script>

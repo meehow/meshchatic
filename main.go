@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/md5"
 	"fmt"
 	"log"
 	"meshchatic/messagehub"
@@ -22,7 +23,9 @@ var (
 )
 
 func main() {
-	opts := mqtt.NewClientOptions().AddBroker("tcp://mqtt.meshtastic.org:1883").SetClientID("meshchatic")
+	hostname, _ := os.Hostname()
+	clientID := fmt.Sprintf("meshchatic-%x", md5.Sum([]byte(hostname)))
+	opts := mqtt.NewClientOptions().AddBroker("tcp://mqtt.meshtastic.org:1883").SetClientID(clientID)
 	c := mqtt.NewClient(opts)
 	if token := c.Connect(); token.Wait() && token.Error() != nil {
 		panic(token.Error())
@@ -47,14 +50,11 @@ func mqttHandler(client mqtt.Client, msg mqtt.Message) {
 	if len(topic) < 6 {
 		return
 	}
-	switch topic[5] {
-	case "NODEINFO_APP", "POSITION_APP", "TEXT_MESSAGE_APP":
-		hub.Broadcast <- messagehub.Message{
-			Topic:   topic[5],
-			Payload: msg.Payload(),
-		}
-	default:
-		log.Printf("Ignored app %q", topic[5])
+	hub.Broadcast <- messagehub.Message{
+		Channel: topic[3],
+		NodeID:  topic[4],
+		App:     topic[5],
+		Payload: msg.Payload(),
 	}
 }
 

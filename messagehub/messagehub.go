@@ -7,28 +7,37 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const historyLimit = 256
-
-var topics = []string{"NODEINFO_APP", "POSITION_APP", "TEXT_MESSAGE_APP"}
+const (
+	historyLimit   = 256
+	nodeinfoApp    = "NODEINFO_APP"
+	positionApp    = "POSITION_APP"
+	textMessageApp = "TEXT_MESSAGE_APP"
+)
 
 type Hub struct {
-	clients   map[*websocket.Conn]struct{}
-	Broadcast chan Message
-	Register  chan *websocket.Conn
-	history   map[string][]json.RawMessage
+	clients      map[*websocket.Conn]struct{}
+	Broadcast    chan Message
+	Register     chan *websocket.Conn
+	nodeinfos    map[string]Message
+	positions    map[string]Message
+	textMessages []Message
 }
 
 type Message struct {
-	Topic   string          `json:"topic"`
+	Channel string          `json:"channel"`
+	NodeID  string          `json:"nodeID"`
+	App     string          `json:"app"`
 	Payload json.RawMessage `json:"payload"`
 }
 
 func New() *Hub {
 	hub := &Hub{
-		Broadcast: make(chan Message),
-		Register:  make(chan *websocket.Conn),
-		clients:   make(map[*websocket.Conn]struct{}),
-		history:   make(map[string][]json.RawMessage),
+		Broadcast:    make(chan Message),
+		Register:     make(chan *websocket.Conn),
+		clients:      make(map[*websocket.Conn]struct{}),
+		nodeinfos:    make(map[string]Message),
+		positions:    make(map[string]Message),
+		textMessages: make([]Message, 0, historyLimit),
 	}
 	go hub.run()
 	return hub
@@ -39,19 +48,29 @@ func (h *Hub) run() {
 		select {
 		case client := <-h.Register:
 			h.clients[client] = struct{}{}
-			for _, topic := range topics {
-				for _, payload := range h.history[topic] {
-					client.WriteJSON(Message{
-						Topic:   topic,
-						Payload: payload,
-					})
-				}
+			for _, message := range h.nodeinfos {
+				client.WriteJSON(message)
+			}
+			for _, message := range h.positions {
+				client.WriteJSON(message)
+			}
+			for _, message := range h.textMessages {
+				client.WriteJSON(message)
 			}
 		case message := <-h.Broadcast:
-			if len(h.history[message.Topic]) >= historyLimit {
-				h.history[message.Topic] = append(h.history[message.Topic][:1], message.Payload)
-			} else {
-				h.history[message.Topic] = append(h.history[message.Topic], message.Payload)
+			switch message.App {
+			case nodeinfoApp:
+				h.nodeinfos[message.NodeID] = message
+			case positionApp:
+				h.positions[message.NodeID] = message
+			case textMessageApp:
+				if len(h.textMessages) >= historyLimit {
+					h.textMessages = append(h.textMessages[:1], message)
+				} else {
+					h.textMessages = append(h.textMessages, message)
+				}
+			default:
+				log.Printf("App %q not implemented", message.App)
 			}
 			for client := range h.clients {
 				err := client.WriteJSON(message)
