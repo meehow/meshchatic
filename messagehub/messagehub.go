@@ -65,7 +65,7 @@ func (h *Hub) run() {
 				h.positions[message.NodeID] = message
 			case textMessageApp:
 				if len(h.textMessages) >= historyLimit {
-					h.textMessages = append(h.textMessages[:1], message)
+					h.textMessages = append(h.textMessages[1:], message)
 				} else {
 					h.textMessages = append(h.textMessages, message)
 				}

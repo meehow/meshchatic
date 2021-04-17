@@ -7,19 +7,37 @@
 	<link rel="stylesheet" href="/leaflet/leaflet.css" />
 	<script src="/leaflet/leaflet.js"></script>
 	<style>
+		html,
+		body {
+			height: 100%;
+			padding: 0;
+			margin: 0;
+		}
+
 		body {
 			font-family: sans-serif;
-			margin: 20px auto;
+			margin: 0 auto;
 			max-width: 1000px;
 			line-height: 1.6;
 			font-size: 18px;
 			color: #444;
-			padding: 0 10px
+
+		}
+
+		h1,
+		#chat {
+			padding: 10px;
 		}
 
 		#map {
-			height: 500px;
-			margin-bottom: 20px;
+			height: 50%;
+			max-height: 600px;
+			margin-bottom: 10px;
+		}
+
+		#chat {
+			height: 50%;
+			overflow-y: scroll;
 		}
 	</style>
 	<title>Meshchatic</title>
@@ -43,85 +61,103 @@
 			var message = JSON.parse(event.data);
 			switch (message.app) {
 				case 'NODEINFO_APP':
-					onNodeinfo(message);
+					onNodeinfo(message.nodeID, message.payload);
 					break;
 				case 'POSITION_APP':
-					onPosition(message);
+					onPosition(message.nodeID, message.payload);
 					break;
 				case 'TEXT_MESSAGE_APP':
-					onTextMessage(message);
+					onTextMessage(message.nodeID, message.payload);
 					break;
 			}
 		}
-		function onNodeinfo(message) {
-			nodeinfos[message.nodeID] = message;
+		function onNodeinfo(nodeID, payload) {
+			nodeinfos[nodeID] = payload;
 		}
-		function onPosition(message) {
-			var decoded = message.payload.packet.decoded;
+		function onPosition(nodeID, payload) {
+			var decoded = payload.packet.decoded;
 			if (!decoded.latitudeI && !decoded.longitudeI) {
 				return;
 			}
-			marker = markers[message.nodeID];
+			marker = markers[nodeID];
 			var latLng = [
 				decoded.latitudeI / 10000000,
-				decoded.longitudeI / 10000000]
+				decoded.longitudeI / 10000000
+			];
 			if (!marker) {
 				marker = L.marker(latLng);
-				markers[message.nodeID] = marker;
+				markers[nodeID] = marker;
 				marker.addTo(map);
 			} else {
 				marker.setLatLng(latLng);
 			}
-			var popup = 'Node ID: ' + message.nodeID;
-			var nodeinfo = nodeinfos[message.nodeID];
+			var popup = 'Node ID: ' + nodeID;
+			var nodeinfo = nodeinfos[nodeID];
 			if (nodeinfo) {
-				popup += '<br>Name: ' + nodeinfo.payload.packet.decoded.longName;
-				if (nodeinfo.payload.packet.decoded.shortName != nodeinfo.payload.packet.decoded.longName) {
-					popup += '<br>Short name: ' + nodeinfo.payload.packet.decoded.shortName;
+				popup += '<br>Name: ' + nodeinfo.packet.decoded.longName;
+				if (nodeinfo.packet.decoded.shortName != nodeinfo.packet.decoded.longName) {
+					popup += '<br>Short name: ' + nodeinfo.packet.decoded.shortName;
 				}
-				popup += '<br>Hardware: ' + nodeinfo.payload.packet.decoded.hwModel;
-				popup += '<br>Channel: ' + nodeinfo.payload.channelId;
+				popup += '<br>Hardware: ' + nodeinfo.packet.decoded.hwModel;
+				popup += '<br>Channel: ' + nodeinfo.channelId;
 			}
 			marker.bindPopup(popup);
 		}
-		function onTextMessage(message) {
-			if (prevPacket == message.payload.packet.id) {
+		function onTextMessage(nodeID, payload) {
+			if (prevPacket == payload.packet.id) {
 				return;
 			}
-			var nodeinfo = nodeinfos[message.nodeID];
-			var nodeMarker = markers[message.nodeID];
-			var gateMarker = markers[message.payload.gatewayId];
+			var nodeinfo = nodeinfos[nodeID];
+			var nodeMarker = markers[nodeID];
+			var gateMarker = markers[payload.gatewayId];
 			var clone = document.querySelector('#textMessage').content.cloneNode(true);
 			if (nodeMarker) {
 				clone.querySelector('.from').href = "#";
-				clone.querySelector('.from').onclick = function() {
+				clone.querySelector('.from').onclick = function (e) {
+					e.preventDefault();
 					nodeMarker.openPopup();
-				}
+				};
 			}
-			clone.querySelector('.from').textContent = nodeinfo ? nodeinfo.payload.packet.decoded.longName : message.payload.packet.from;
+			clone.querySelector('.from').textContent = nodeinfo ? nodeinfo.packet.decoded.longName : payload.packet.from;
 			if (gateMarker) {
 				clone.querySelector('.gate').href = "#";
-				clone.querySelector('.gate').onclick = function() {
+				clone.querySelector('.gate').onclick = function (e) {
+					e.preventDefault();
 					gateMarker.openPopup();
-				}
+				};
 			}
-			clone.querySelector('.gate').textContent = message.payload.gatewayId;
-			clone.querySelector('.text').textContent = message.payload.packet.decoded;
+			clone.querySelector('.gate').textContent = payload.gatewayId;
+			clone.querySelector('.text').textContent = payload.packet.decoded;
 			chat.appendChild(clone);
-			prevPacket = message.payload.packet.id;
+			chat.scrollTop = chat.scrollHeight;
+			prevPacket = payload.packet.id;
+		}
 
+		function init() {
+			var url = location.protocol == 'http:' ? 'ws://localhost:1985/ws' : 'wss://' + location.hostname + '/ws';
+			var socket = new WebSocket(url);
+			socket.onconnect = function() {
+				chat.innerHTML = '';
+			};
+			socket.onclose = function() {
+				setTimeout(init, 3000);
+			};
+			socket.error = function (err) {
+				console.error(err.message);
+				socket.close();
+			};
+			socket.onmessage = onMessage;
 		}
 		var prevPacket;
 		var nodeinfos = {};
 		var markers = {};
+		var socket;
 		var chat = document.querySelector('#chat');
-		var map = L.map('map').setView([20, 10], 2);
+		var map = L.map('map').setView([0, 0], 1);
 		L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 			attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 		}).addTo(map);
-		var socket = new WebSocket(location.protocol == 'http:' ? 'ws://localhost:1985/ws' : 'wss://' + location.hostname + '/ws');
-		socket.onmessage = onMessage;
-		socket.onerror = console.log;
+		init();
 	</script>
 </body>
 
