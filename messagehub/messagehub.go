@@ -48,15 +48,6 @@ func (h *Hub) run() {
 		select {
 		case client := <-h.Register:
 			h.clients[client] = struct{}{}
-			for _, message := range h.nodeinfos {
-				client.WriteJSON(message)
-			}
-			for _, message := range h.positions {
-				client.WriteJSON(message)
-			}
-			for _, message := range h.textMessages {
-				client.WriteJSON(message)
-			}
 		case message := <-h.Broadcast:
 			switch message.App {
 			case nodeinfoApp:
@@ -82,4 +73,15 @@ func (h *Hub) run() {
 			}
 		}
 	}
+}
+
+func (h *Hub) History() []Message {
+	messages := make([]Message, 0, len(h.nodeinfos)+len(h.positions)+len(h.textMessages))
+	for _, message := range h.nodeinfos {
+		messages = append(messages, message)
+	}
+	for _, message := range h.positions {
+		messages = append(messages, message)
+	}
+	return append(messages, h.textMessages...)
 }

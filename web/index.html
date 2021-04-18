@@ -57,8 +57,7 @@
 	</template>
 
 	<script>
-		function onMessage(event) {
-			var message = JSON.parse(event.data);
+		function onMessage(message) {
 			switch (message.app) {
 				case 'NODEINFO_APP':
 					onNodeinfo(message.nodeID, message.payload);
@@ -136,17 +135,16 @@
 		function init() {
 			var url = location.protocol == 'http:' ? 'ws://localhost:1985/ws' : 'wss://' + location.hostname + '/ws';
 			var socket = new WebSocket(url);
-			socket.onconnect = function() {
-				chat.innerHTML = '';
-			};
-			socket.onclose = function() {
+			socket.onclose = function () {
 				setTimeout(init, 3000);
 			};
 			socket.error = function (err) {
 				console.error(err.message);
 				socket.close();
 			};
-			socket.onmessage = onMessage;
+			socket.onmessage = function (event) {
+				onMessage(JSON.parse(event.data));
+			};
 		}
 		var prevPacket;
 		var nodeinfos = {};
@@ -157,7 +155,18 @@
 		L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 			attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 		}).addTo(map);
-		init();
+		var prefix = location.protocol == 'http:' ? 'http://localhost:1985' : '';
+		var r = new XMLHttpRequest();
+		r.open('GET', prefix + '/history.json', true);
+		r.onreadystatechange = function () {
+			if (r.readyState != 4 || r.status != 200) return;
+			var messages = JSON.parse(r.responseText);
+			for (var i = 0; i < messages.length; i++) {
+				onMessage(messages[i]);
+			}
+			init();
+		};
+		r.send();
 	</script>
 </body>
 

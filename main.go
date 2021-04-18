@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/md5"
+	"encoding/json"
 	"fmt"
 	"log"
 	"meshchatic/messagehub"
@@ -37,6 +38,7 @@ func main() {
 	}
 	log.Println("Subscribed")
 	http.HandleFunc("/ws", wsHandler)
+	http.HandleFunc("/history.json", jsonHandler)
 	http.ListenAndServe(":1985", nil)
 }
 
@@ -66,4 +68,10 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Println("New client", conn.RemoteAddr())
 	hub.Register <- conn
+}
+
+func jsonHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	// w.Header().Set("Access-Control-Allow-Origin", "*")
+	json.NewEncoder(w).Encode(hub.History())
 }
