@@ -3,6 +3,7 @@ package messagehub
 import (
 	"encoding/json"
 	"log"
+	"regexp"
 
 	"github.com/gorilla/websocket"
 )
@@ -13,6 +14,8 @@ const (
 	positionApp    = "POSITION_APP"
 	textMessageApp = "TEXT_MESSAGE_APP"
 )
+
+var rangetest = regexp.MustCompile(`^seq \d+$`)
 
 type Hub struct {
 	clients      map[*websocket.Conn]struct{}
@@ -55,6 +58,9 @@ func (h *Hub) run() {
 			case positionApp:
 				h.positions[message.NodeID] = message
 			case textMessageApp:
+				if rangetest.Match(message.Payload) {
+					continue
+				}
 				if len(h.textMessages) >= historyLimit {
 					h.textMessages = append(h.textMessages[1:], message)
 				} else {

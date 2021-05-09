@@ -103,7 +103,7 @@
 			marker.bindPopup(popup);
 		}
 		function onTextMessage(nodeID, payload) {
-			if (prevPacket == payload.packet.id) {
+			if (prevPacket == payload.packet.id || payload.packet.decoded.match(/^seq \d+$/)) {
 				return;
 			}
 			var nodeinfo = nodeinfos[nodeID];
