@@ -8,7 +8,6 @@ import (
 	"meshchatic/messagehub"
 	"net/http"
 	"os"
-	"strings"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/gorilla/websocket"
@@ -26,13 +25,17 @@ var (
 func main() {
 	hostname, _ := os.Hostname()
 	clientID := fmt.Sprintf("meshchatic-%x", md5.Sum([]byte(hostname)))
-	opts := mqtt.NewClientOptions().AddBroker("tcp://mqtt.meshtastic.org:1883").SetClientID(clientID)
+	opts := mqtt.NewClientOptions().
+		AddBroker("tcp://mqtt.meshtastic.org:1883").
+		SetUsername("meshdev").
+		SetPassword("large4cats").
+		SetClientID(clientID)
 	c := mqtt.NewClient(opts)
 	if token := c.Connect(); token.Wait() && token.Error() != nil {
 		panic(token.Error())
 	}
 	log.Println("Connected")
-	if token := c.Subscribe("msh/+/json/#", 0, mqttHandler); token.Wait() && token.Error() != nil {
+	if token := c.Subscribe("msh/2/#", 0, mqttHandler); token.Wait() && token.Error() != nil {
 		fmt.Println(token.Error())
 		os.Exit(1)
 	}
@@ -47,17 +50,8 @@ func checkOrigin(r *http.Request) bool {
 }
 
 func mqttHandler(client mqtt.Client, msg mqtt.Message) {
-	log.Println("Received message", msg.Topic())
-	topic := strings.Split(msg.Topic(), "/")
-	if len(topic) < 6 {
-		return
-	}
-	hub.Broadcast <- messagehub.Message{
-		Channel: topic[3],
-		NodeID:  topic[4],
-		App:     topic[5],
-		Payload: msg.Payload(),
-	}
+	// log.Println("Received message", msg.Topic())
+	hub.Broadcast <- msg
 }
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {

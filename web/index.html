@@ -58,6 +58,7 @@
 
 	<script>
 		function onMessage(message) {
+			console.log(message);
 			switch (message.app) {
 				case 'NODEINFO_APP':
 					onNodeinfo(message.nodeID, message.payload);
@@ -80,8 +81,8 @@
 			}
 			marker = markers[nodeID];
 			var latLng = [
-				decoded.latitudeI / 10000000,
-				decoded.longitudeI / 10000000
+				decoded.latitudeI  * 0.0000001,
+				decoded.longitudeI * 0.0000001
 			];
 			if (!marker) {
 				marker = L.marker(latLng);
