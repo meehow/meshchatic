@@ -58,58 +58,58 @@
 
 	<script>
 		function onMessage(message) {
-			console.log(message);
 			switch (message.app) {
 				case 'NODEINFO_APP':
-					onNodeinfo(message.nodeID, message.payload);
+					onNodeinfo(message);
 					break;
 				case 'POSITION_APP':
-					onPosition(message.nodeID, message.payload);
+					onPosition(message);
 					break;
 				case 'TEXT_MESSAGE_APP':
-					onTextMessage(message.nodeID, message.payload);
+					onTextMessage(message);
 					break;
 			}
 		}
-		function onNodeinfo(nodeID, payload) {
-			nodeinfos[nodeID] = payload;
+		function onNodeinfo(message) {
+			nodeinfos[message.gateway_id] = message;
 		}
-		function onPosition(nodeID, payload) {
-			var decoded = payload.packet.decoded;
-			if (!decoded.latitudeI && !decoded.longitudeI) {
+		function onPosition(message) {
+			var payload = message.payload;
+			if (!payload.latitude_i && !payload.longitude_i) {
 				return;
 			}
-			marker = markers[nodeID];
+			marker = markers[message.gateway_id];
 			var latLng = [
-				decoded.latitudeI  * 0.0000001,
-				decoded.longitudeI * 0.0000001
+				payload.latitude_i  * 0.0000001,
+				payload.longitude_i * 0.0000001
 			];
 			if (!marker) {
 				marker = L.marker(latLng);
-				markers[nodeID] = marker;
+				markers[message.gateway_id] = marker;
 				marker.addTo(map);
 			} else {
 				marker.setLatLng(latLng);
 			}
-			var popup = 'Node ID: ' + nodeID;
-			var nodeinfo = nodeinfos[nodeID];
+			var popup = 'Node ID: ' + message.gateway_id;
+			var nodeinfo = nodeinfos[message.gateway_id];
 			if (nodeinfo) {
-				popup += '<br>Name: ' + nodeinfo.packet.decoded.longName;
-				if (nodeinfo.packet.decoded.shortName != nodeinfo.packet.decoded.longName) {
-					popup += '<br>Short name: ' + nodeinfo.packet.decoded.shortName;
+				popup += '<br>Name: ' + nodeinfo.payload.long_name;
+				if (nodeinfo.payload.short_name != nodeinfo.payload.long_name) {
+					popup += '<br>Short name: ' + nodeinfo.payload.short_name;
 				}
-				popup += '<br>Hardware: ' + nodeinfo.packet.decoded.hwModel;
-				popup += '<br>Channel: ' + nodeinfo.channelId;
+				popup += '<br>Hardware: ' + nodeinfo.payload.hw_model;
+				popup += '<br>Channel: ' + nodeinfo.channel;
 			}
 			marker.bindPopup(popup);
 		}
-		function onTextMessage(nodeID, payload) {
-			if (prevPacket == payload.packet.id || payload.packet.decoded.match(/^seq \d+$/)) {
+		function onTextMessage(message) {
+			var payload = message.payload;
+			if (prevPacket == payload.packet.id || payload.payload.match(/^seq \d+$/)) {
 				return;
 			}
-			var nodeinfo = nodeinfos[nodeID];
-			var nodeMarker = markers[nodeID];
-			var gateMarker = markers[payload.gatewayId];
+			var nodeinfo = nodeinfos[message.gateway_id];
+			var nodeMarker = markers[message.gateway_id];
+			var gateMarker = markers[message.gateway_id];
 			var clone = document.querySelector('#textMessage').content.cloneNode(true);
 			if (nodeMarker) {
 				clone.querySelector('.from').href = "#";
@@ -118,7 +118,7 @@
 					nodeMarker.openPopup();
 				};
 			}
-			clone.querySelector('.from').textContent = nodeinfo ? nodeinfo.packet.decoded.longName : payload.packet.from;
+			clone.querySelector('.from').textContent = nodeinfo ? nodeinfo.packet.decoded.long_name : payload.packet.from;
 			if (gateMarker) {
 				clone.querySelector('.gate').href = "#";
 				clone.querySelector('.gate').onclick = function (e) {
